@@ -259,16 +259,21 @@ export class UpChunk {
     const rangeEnd = rangeStart + this.chunk.size - 1;
     const headers = {
       ...this.headers,
-      'Content-Type': this.file.type,
+      // 'Content-Type': this.file.type,
       'Content-Range': `bytes ${rangeStart}-${rangeEnd}/${this.file.size}`,
     };
     const formData = new FormData();
-    formData.append('data', this.chunk);
     formData.append('name', this.additionalData?.name || '');
     formData.append('description', this.additionalData?.description || '');
     if (this.additionalData?.storeIds) {
       formData.append('storeIds', JSON.stringify(this.additionalData.storeIds));
     }
+    formData.append('fileName', this.file.name);
+    formData.append('fileSize', `${this.file.size}`);
+    formData.append('start', `${rangeStart}`);
+    formData.append('end', `${rangeEnd}`);
+
+    formData.append('data', this.chunk);
     this.dispatch('attempt', {
       chunkNumber: this.chunkCount,
       chunkSize: this.chunk.size,
