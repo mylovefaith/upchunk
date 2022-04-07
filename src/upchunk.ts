@@ -18,10 +18,7 @@ type EventName =
 // by e.g. typing the detail of the CustomEvent per EventName.
 type UpchunkEvent = CustomEvent & Event<EventName>;
 
-type AllowedMethods =
-  | 'PUT'
-  | 'POST'
-  | 'PATCH';
+type AllowedMethods = 'PUT' | 'POST' | 'PATCH';
 
 export interface UpChunkOptions {
   endpoint: string | ((file?: File) => Promise<string>);
@@ -32,12 +29,14 @@ export interface UpChunkOptions {
   chunkSize?: number;
   attempts?: number;
   delayBeforeAttempt?: number;
+  data?: any;
 }
 
-export class UpChunk  {
+export class UpChunk {
   public endpoint: string | ((file?: File) => Promise<string>);
   public file: File;
   public headers: XhrHeaders;
+  public additionalData: any;
   public method: AllowedMethods;
   public chunkSize: number;
   public attempts: number;
@@ -56,11 +55,12 @@ export class UpChunk  {
   private currentXhr?: XMLHttpRequest;
 
   private reader: FileReader;
-  private eventTarget: EventTarget<Record<EventName,UpchunkEvent>>;
+  private eventTarget: EventTarget<Record<EventName, UpchunkEvent>>;
 
   constructor(options: UpChunkOptions) {
     this.endpoint = options.endpoint;
     this.file = options.file;
+    this.additionalData = options.data;
     this.headers = options.headers || ({} as XhrHeaders);
     this.method = options.method || 'PUT';
     this.chunkSize = options.chunkSize || 30720;
@@ -84,7 +84,7 @@ export class UpChunk  {
 
     // restart sync when back online
     // trigger events when offline/back online
-    if (typeof(window) !== 'undefined') {
+    if (typeof window !== 'undefined') {
       window.addEventListener('online', () => {
         if (!this.offline) {
           return;
@@ -130,7 +130,9 @@ export class UpChunk  {
    * Dispatch an event
    */
   private dispatch(eventName: EventName, detail?: any) {
-    const event: UpchunkEvent = new CustomEvent(eventName, { detail }) as UpchunkEvent;
+    const event: UpchunkEvent = new CustomEvent(eventName, {
+      detail,
+    }) as UpchunkEvent;
 
     this.eventTarget.dispatchEvent(event);
   }
@@ -202,7 +204,7 @@ export class UpChunk  {
    * Get portion of the file of x bytes corresponding to chunkSize
    */
   private getChunk() {
-    return new Promise<void> ((resolve) => {
+    return new Promise<void>((resolve) => {
       // Since we start with 0-chunkSize for the range, we need to subtract 1.
       const length =
         this.totalChunks === 1 ? this.file.size : this.chunkByteSize;
@@ -227,9 +229,13 @@ export class UpChunk  {
         const percentagePerChunk = 100 / this.totalChunks;
         const sizePerChunk = percentagePerChunk * this.file.size;
         const successfulPercentage = percentagePerChunk * this.chunkCount;
-        const currentChunkProgress = event.loaded / (event.total ?? sizePerChunk);
+        const currentChunkProgress =
+          event.loaded / (event.total ?? sizePerChunk);
         const chunkPercentage = currentChunkProgress * percentagePerChunk;
-        this.dispatch('progress', Math.min(successfulPercentage + chunkPercentage, 100));
+        this.dispatch(
+          'progress',
+          Math.min(successfulPercentage + chunkPercentage, 100)
+        );
       };
     };
 
@@ -256,7 +262,13 @@ export class UpChunk  {
       'Content-Type': this.file.type,
       'Content-Range': `bytes ${rangeStart}-${rangeEnd}/${this.file.size}`,
     };
-
+    const formData = new FormData();
+    formData.append('data', this.chunk);
+    formData.append('name', this.additionalData?.name || '');
+    formData.append('description', this.additionalData?.description || '');
+    if (this.additionalData?.storeIds) {
+      formData.append('storeIds', JSON.stringify(this.additionalData.storeIds));
+    }
     this.dispatch('attempt', {
       chunkNumber: this.chunkCount,
       chunkSize: this.chunk.size,
@@ -266,7 +278,7 @@ export class UpChunk  {
       headers,
       url: this.endpointValue,
       method: this.method,
-      body: this.chunk,
+      body: formData,
     });
   }
 
@@ -306,7 +318,7 @@ export class UpChunk  {
       .then(() => {
         this.attemptCount = this.attemptCount + 1;
 
-        return this.sendChunk()
+        return this.sendChunk();
       })
       .then((res) => {
         if (SUCCESSFUL_CHUNK_UPLOAD_CODES.includes(res.statusCode)) {
