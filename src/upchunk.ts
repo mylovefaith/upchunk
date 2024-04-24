@@ -268,6 +268,9 @@ export class UpChunk {
     if (this.additionalData?.storeIds) {
       formData.append('storeIds', JSON.stringify(this.additionalData.storeIds));
     }
+    if (this.additionalData?.moduleName) {
+      formData.append('moduleName', this.additionalData.moduleName);
+    }
     formData.append('fileName', this.file.name);
     formData.append('fileSize', `${this.file.size}`);
     formData.append('start', `${rangeStart}`);
